@@ -5,7 +5,14 @@ from datetime import datetime
 import time
 import sys
 from git_messenger import GitMessenger
-from config import load_config, save_config, setup_config, update_config
+from config import (
+    load_config, 
+    save_config, 
+    setup_config, 
+    update_config, 
+    save_recent_repo,
+    get_repo_url
+)
 
 class GitChat:
     def __init__(self, repo_url, platform_name, username=None, token=None, password=None):
@@ -99,16 +106,20 @@ def run_chat():
     print(f"\n已选择平台: {platform_name}")
     print(f"用户名: {platform_info['username']}")
     
-    # 获取仓库地址
-    print("\n请输入仓库地址，格式如下：")
-    print(f"{platform_name}: https://{platform_name.lower()}.com/用户名/仓库名.git")
-    repo_url = input("请输入仓库地址: ").strip()
+    # 使用 get_repo_url 函数获取仓库地址
+    repo_url = get_repo_url(platform_name, config)
+    if not repo_url:
+        print("❌ 已取消操作")
+        return
     
     # 验证仓库地址格式
     platform_domain = f"{platform_name.lower()}.com"
     if platform_domain not in repo_url:
         print(f"❌ 仓库地址与选择的平台({platform_name})不匹配！")
         return
+    
+    # 保存仓库地址到最近使用列表
+    save_recent_repo(platform_name, repo_url)
     
     # 初始化聊天
     chat = GitChat(
