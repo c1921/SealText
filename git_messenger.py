@@ -3,6 +3,10 @@ import git
 import json
 from datetime import datetime
 import logging
+import time
+import requests
+from urllib3.util.retry import Retry
+from requests.adapters import HTTPAdapter
 
 # 设置日志
 logging.basicConfig(level=logging.DEBUG)
@@ -15,6 +19,9 @@ class GitMessenger:
         self.username = username
         self.token = token
         
+        # 配置 git 的全局设置
+        self._configure_git()
+        
         logger.debug(f"初始化 GitMessenger: repo_path={repo_path}, remote_url={remote_url}, username={username}")
         
         # 如果提供了用户名和令牌，修改远程URL以包含认证信息
@@ -25,8 +32,53 @@ class GitMessenger:
         
         self.repo = self._init_repo()
     
+    def _configure_git(self):
+        """配置git全局设置"""
+        try:
+            # 设置较长的超时时间
+            os.environ['GIT_HTTP_CONNECT_TIMEOUT'] = '60'
+            os.environ['GIT_HTTP_LOW_SPEED_LIMIT'] = '1000'
+            os.environ['GIT_HTTP_LOW_SPEED_TIME'] = '60'
+            
+            # 禁用 SSL 验证（如果需要的话）
+            # os.environ['GIT_SSL_NO_VERIFY'] = '1'
+            
+            # 设置 HTTP 代理（如果需要的话）
+            # os.environ['HTTP_PROXY'] = 'http://your-proxy:port'
+            # os.environ['HTTPS_PROXY'] = 'http://your-proxy:port'
+        except Exception as e:
+            logger.warning(f"配置git设置时出错: {str(e)}")
+    
+    def _check_github_connection(self):
+        """检查与GitHub的连接"""
+        try:
+            session = requests.Session()
+            retries = Retry(total=3, backoff_factor=0.5)
+            session.mount('https://', HTTPAdapter(max_retries=retries))
+            response = session.get('https://api.github.com', timeout=10)
+            response.raise_for_status()
+            return True
+        except Exception as e:
+            logger.error(f"GitHub连接测试失败: {str(e)}")
+            return False
+    
+    def _git_operation_with_retry(self, operation, max_retries=3):
+        """带重试机制的git操作"""
+        for attempt in range(max_retries):
+            try:
+                return operation()
+            except git.exc.GitCommandError as e:
+                if attempt == max_retries - 1:
+                    raise
+                logger.warning(f"Git操作失败，尝试重试 ({attempt + 1}/{max_retries})")
+                time.sleep(2 ** attempt)  # 指数退避
+    
     def _init_repo(self):
         try:
+            # 首先检查GitHub连接
+            if not self._check_github_connection():
+                raise Exception("无法连接到GitHub，请检查网络连接")
+            
             if not os.path.exists(self.repo_path):
                 logger.debug(f"创建新仓库: {self.repo_path}")
                 os.makedirs(self.repo_path)
@@ -45,16 +97,31 @@ class GitMessenger:
                     logger.debug("添加远程仓库")
                     origin = repo.create_remote('origin', self.remote_url)
                     
-                    # 创建初始提交
-                    logger.debug("创建初始提交")
-                    message_file = os.path.join(self.repo_path, 'messages.json')
-                    open(message_file, 'w', encoding='utf-8').write('[]')
-                    repo.index.add(['messages.json'])
-                    repo.index.commit('Initial commit')
-                    
+                    try:
+                        # 尝试拉取远程仓库
+                        logger.debug("尝试拉取远程仓库")
+                        origin.fetch()
+                        origin.pull('main')
+                    except git.exc.GitCommandError:
+                        # 如果拉取失败（可能是新仓库），创建初始提交
+                        logger.debug("创建初始提交")
+                        message_file = os.path.join(self.repo_path, 'messages.json')
+                        open(message_file, 'w', encoding='utf-8').write('[]')
+                        repo.index.add(['messages.json'])
+                        repo.index.commit('Initial commit')
+                        
                     # 设置上游分支并推送
-                    logger.debug("推送初始提交")
-                    repo.git.push('--set-upstream', 'origin', 'main')
+                    logger.debug("推送到远程仓库")
+                    try:
+                        repo.git.push('--set-upstream', 'origin', 'main')
+                    except git.exc.GitCommandError as e:
+                        if "fetch first" in str(e):
+                            # 如果推送被拒绝，先拉取再推送
+                            logger.debug("推送被拒绝，尝试先拉取")
+                            origin.pull('main')
+                            repo.git.push('--set-upstream', 'origin', 'main')
+                        else:
+                            raise
             else:
                 logger.debug(f"打开已存在的仓库: {self.repo_path}")
                 repo = git.Repo(self.repo_path)
@@ -78,21 +145,15 @@ class GitMessenger:
                 # 确保在 main 分支上
                 if 'main' not in repo.heads:
                     logger.debug("创建 main 分支")
-                    repo.create_head('main')
+                    repo.create_head('main', origin.refs.main)
                 
                 if repo.active_branch.name != 'main':
                     logger.debug("切换到 main 分支")
                     repo.heads.main.checkout()
                 
-                # 尝试设置上游分支
-                try:
-                    logger.debug("设置上游分支")
-                    repo.git.branch('--set-upstream-to=origin/main', 'main')
-                except git.exc.GitCommandError:
-                    logger.warning("设置上游分支失败，尝试先拉取")
-                    origin = repo.remote('origin')
-                    origin.fetch()
-                    repo.git.branch('--set-upstream-to=origin/main', 'main')
+                # 同步远程更改
+                logger.debug("同步远程更改")
+                origin.pull('main')
             
             return repo
             
