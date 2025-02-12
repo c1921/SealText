@@ -7,17 +7,19 @@ import time
 import requests
 from urllib3.util.retry import Retry
 from requests.adapters import HTTPAdapter
+from crypto_utils import MessageCrypto
 
 # 设置日志
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 class GitMessenger:
-    def __init__(self, repo_path, remote_url=None, username=None, token=None):
+    def __init__(self, repo_path, remote_url=None, username=None, token=None, password=None):
         self.repo_path = repo_path
         self.remote_url = remote_url
         self.username = username
         self.token = token
+        self.crypto = MessageCrypto(password) if password else None
         
         # 配置 git 的全局设置
         self._configure_git()
@@ -49,17 +51,26 @@ class GitMessenger:
         except Exception as e:
             logger.warning(f"配置git设置时出错: {str(e)}")
     
-    def _check_github_connection(self):
-        """检查与GitHub的连接"""
+    def _check_git_connection(self):
+        """检查与Git服务器的连接"""
         try:
             session = requests.Session()
             retries = Retry(total=3, backoff_factor=0.5)
             session.mount('https://', HTTPAdapter(max_retries=retries))
-            response = session.get('https://api.github.com', timeout=10)
+            
+            # 根据URL判断是GitHub还是Gitee
+            if 'github.com' in self.remote_url:
+                test_url = 'https://api.github.com'
+            elif 'gitee.com' in self.remote_url:
+                test_url = 'https://gitee.com/api/v5'
+            else:
+                raise ValueError("不支持的Git服务商，目前仅支持GitHub和Gitee")
+            
+            response = session.get(test_url, timeout=10)
             response.raise_for_status()
             return True
         except Exception as e:
-            logger.error(f"GitHub连接测试失败: {str(e)}")
+            logger.error(f"Git服务器连接测试失败: {str(e)}")
             return False
     
     def _git_operation_with_retry(self, operation, max_retries=3):
@@ -75,9 +86,9 @@ class GitMessenger:
     
     def _init_repo(self):
         try:
-            # 首先检查GitHub连接
-            if not self._check_github_connection():
-                raise Exception("无法连接到GitHub，请检查网络连接")
+            # 首先检查Git服务器连接
+            if not self._check_git_connection():
+                raise Exception("无法连接到Git服务器，请检查网络连接")
             
             if not os.path.exists(self.repo_path):
                 logger.debug(f"创建新仓库: {self.repo_path}")
@@ -179,12 +190,22 @@ class GitMessenger:
             else:
                 messages = []
             
-            # 添加新消息
-            messages.append({
+            # 创建消息字典
+            message_dict = {
                 'content': message,
                 'author': author,
                 'timestamp': datetime.now().isoformat()
-            })
+            }
+            
+            # 如果启用了加密，加密整个消息
+            if self.crypto:
+                encrypted_message = self.crypto.encrypt_message(message_dict)
+                messages.append({
+                    'encrypted': True,
+                    'data': encrypted_message
+                })
+            else:
+                messages.append(message_dict)
             
             # 保存消息
             logger.debug("保存消息")
@@ -217,7 +238,26 @@ class GitMessenger:
         origin.pull()
         
         message_file = os.path.join(self.repo_path, 'messages.json')
+        messages = []
         if os.path.exists(message_file):
             with open(message_file, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        return [] 
+                raw_messages = json.load(f)
+                
+                for msg in raw_messages:
+                    if isinstance(msg, dict) and msg.get('encrypted'):
+                        if not self.crypto:
+                            raise ValueError("需要密码来解密消息")
+                        try:
+                            decrypted_msg = self.crypto.decrypt_message(msg['data'])
+                            messages.append(decrypted_msg)
+                        except ValueError as e:
+                            logger.error(f"解密消息失败: {str(e)}")
+                            messages.append({
+                                'content': '【无法解密的消息】',
+                                'author': '未知',
+                                'timestamp': '未知'
+                            })
+                    else:
+                        messages.append(msg)
+        
+        return messages 

@@ -5,24 +5,24 @@ from datetime import datetime
 import time
 import sys
 from git_messenger import GitMessenger
-from config import load_config, save_config, setup_config
+from config import load_config, save_config, setup_config, update_config
 
 class GitChat:
-    def __init__(self, github_url, username=None, token=None):
-        self.github_url = github_url
-        # 从配置文件获取仓库保存路径
+    def __init__(self, repo_url, platform_name, username=None, token=None, password=None):
+        self.repo_url = repo_url
+        self.platform_name = platform_name
         config = load_config()
         self.local_path = config.get('repo_path', os.path.expanduser('~/.gitchat/repos'))
         self.messenger = None
-        self._setup_repo(username, token)
+        self._setup_repo(username, token, password)
     
-    def _setup_repo(self, username, token):
+    def _setup_repo(self, username, token, password):
         try:
             # 使用仓库名作为本地文件夹名
-            repo_name = self.github_url.split('/')[-1].replace('.git', '')
-            repo_path = os.path.join(self.local_path, repo_name)
+            repo_name = self.repo_url.split('/')[-1].replace('.git', '')
+            repo_path = os.path.join(self.local_path, f"{self.platform_name.lower()}_{repo_name}")
             
-            self.messenger = GitMessenger(repo_path, self.github_url, username, token)
+            self.messenger = GitMessenger(repo_path, self.repo_url, username, token, password)
             print("✅ 仓库连接成功！")
             print(f"📂 本地仓库路径: {repo_path}")
         except Exception as e:
@@ -58,25 +58,66 @@ class GitChat:
         print("==============")
 
 def run_chat():
-    print("=== GitHub 聊天工具 ===")
-    print("提示：每个用户需要使用自己的 GitHub 账号和访问令牌")
+    print("=== Git 聊天工具 ===")
     
-    # 获取或创建配置
-    config = setup_config()
+    # 检查是否需要修改配置
+    if os.path.exists(os.path.join(os.path.expanduser('~/.gitchat'), 'config.json')):
+        if input("是否需要修改现有配置？(y/n): ").lower() == 'y':
+            config = update_config()
+            if not config:
+                return
+        else:
+            config = load_config()
+    else:
+        print("首次运行，需要进行配置")
+        config = setup_config()
+        if not config:
+            return
     
-    # 获取GitHub仓库地址
-    github_url = input("请输入GitHub仓库地址 (https://github.com/用户名/仓库名.git): ").strip()
-    if not github_url:
-        print("❌ 仓库地址不能为空！")
+    print("\n=== 选择Git平台 ===")
+    if not config['platforms']:
+        print("❌ 没有配置任何Git平台！")
         return
     
-    # 使用配置中的信息
-    github_username = config['github_username']
-    github_token = config['github_token']
-    display_name = config['display_name']
+    # 显示已配置的平台
+    platforms = list(config['platforms'].items())
+    for i, (name, info) in enumerate(platforms, 1):
+        print(f"{i}. {name} ({info['username']})")
+    
+    while True:
+        choice = input("\n请选择平台 (输入序号): ").strip()
+        try:
+            idx = int(choice) - 1
+            if 0 <= idx < len(platforms):
+                platform_name, platform_info = platforms[idx]
+                break
+            else:
+                print("❌ 无效的选择！")
+        except ValueError:
+            print("❌ 请输入数字！")
+    
+    print(f"\n已选择平台: {platform_name}")
+    print(f"用户名: {platform_info['username']}")
+    
+    # 获取仓库地址
+    print("\n请输入仓库地址，格式如下：")
+    print(f"{platform_name}: https://{platform_name.lower()}.com/用户名/仓库名.git")
+    repo_url = input("请输入仓库地址: ").strip()
+    
+    # 验证仓库地址格式
+    platform_domain = f"{platform_name.lower()}.com"
+    if platform_domain not in repo_url:
+        print(f"❌ 仓库地址与选择的平台({platform_name})不匹配！")
+        return
     
     # 初始化聊天
-    chat = GitChat(github_url, github_username, github_token)
+    chat = GitChat(
+        repo_url,
+        platform_name,
+        platform_info['username'],
+        platform_info['token'],
+        config['chat_password']
+    )
     
     print("\n🎉 欢迎使用Git聊天工具！")
     print("- 输入消息后按回车发送")
@@ -100,7 +141,7 @@ def run_chat():
             chat.display_messages()
             last_update = time.time()
         elif user_input:
-            if chat.send_message(user_input, display_name):
+            if chat.send_message(user_input, config['display_name']):
                 chat.display_messages()
                 last_update = time.time()
 
