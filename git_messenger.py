@@ -95,6 +95,12 @@ class GitMessenger:
                 logger.warning(f"Git操作失败，尝试重试 ({attempt + 1}/{max_retries})")
                 time.sleep(2 ** attempt)  # 指数退避
     
+    def _get_message_file(self, username):
+        """获取用户特定的消息文件路径"""
+        # 使用用户名创建文件名，避免特殊字符
+        safe_username = "".join(c for c in username if c.isalnum() or c in '-_')
+        return os.path.join(self.repo_path, f'messages_{safe_username}.json')
+    
     def _init_repo(self):
         try:
             # 首先检查Git服务器连接
@@ -127,9 +133,9 @@ class GitMessenger:
                     except git.exc.GitCommandError:
                         # 如果拉取失败（可能是新仓库），创建初始提交
                         logger.debug("创建初始提交")
-                        message_file = os.path.join(self.repo_path, 'messages.json')
+                        message_file = self._get_message_file(self.username)
                         open(message_file, 'w', encoding='utf-8').write('[]')
-                        repo.index.add(['messages.json'])
+                        repo.index.add([os.path.basename(message_file)])
                         repo.index.commit('Initial commit')
                         
                     # 设置上游分支并推送
@@ -180,7 +186,7 @@ class GitMessenger:
             return repo
             
         except Exception as e:
-            logger.error(f"初始化仓库失败: {str(e)}", exc_info=True)
+            logger.error(f"初始化仓库失败: {str(e)}")
             raise
     
     def send_message(self, message, author):
@@ -191,7 +197,7 @@ class GitMessenger:
             logger.debug("拉取最新更改")
             origin.pull()
             
-            message_file = os.path.join(self.repo_path, 'messages.json')
+            message_file = self._get_message_file(self.username)
             logger.debug(f"读取消息文件: {message_file}")
             
             # 读取或创建消息文件
@@ -225,7 +231,7 @@ class GitMessenger:
             
             # 提交更改
             logger.debug("提交更改")
-            self.repo.index.add(['messages.json'])
+            self.repo.index.add([os.path.basename(message_file)])
             self.repo.index.commit(f"Message from {author}")
             
             # 推送到远程仓库
@@ -233,14 +239,14 @@ class GitMessenger:
             origin.push()
             
         except git.exc.GitCommandError as e:
-            logger.error(f"Git操作失败: {str(e)}", exc_info=True)
+            logger.error(f"Git操作失败: {str(e)}")
             if "no upstream branch" in str(e):
                 logger.debug("尝试设置上游分支")
                 self.repo.git.push('--set-upstream', 'origin', 'main')
             else:
                 raise
         except Exception as e:
-            logger.error(f"发送消息失败: {str(e)}", exc_info=True)
+            logger.error(f"发送消息失败: {str(e)}")
             raise
     
     def receive_messages(self):
@@ -248,27 +254,36 @@ class GitMessenger:
         origin = self.repo.remotes.origin
         origin.pull()
         
-        message_file = os.path.join(self.repo_path, 'messages.json')
-        messages = []
-        if os.path.exists(message_file):
-            with open(message_file, 'r', encoding='utf-8') as f:
-                raw_messages = json.load(f)
-                
-                for msg in raw_messages:
-                    if isinstance(msg, dict) and msg.get('encrypted'):
-                        if not self.crypto:
-                            raise ValueError("需要密码来解密消息")
-                        try:
-                            decrypted_msg = self.crypto.decrypt_message(msg['data'])
-                            messages.append(decrypted_msg)
-                        except ValueError as e:
-                            logger.error(f"解密消息失败: {str(e)}")
-                            messages.append({
-                                'content': '【无法解密的消息】',
-                                'author': '未知',
-                                'timestamp': '未知'
-                            })
-                    else:
-                        messages.append(msg)
+        # 获取所有消息文件
+        message_files = [f for f in os.listdir(self.repo_path) 
+                        if f.startswith('messages_') and f.endswith('.json')]
         
-        return messages 
+        all_messages = []
+        for file_name in message_files:
+            message_file = os.path.join(self.repo_path, file_name)
+            try:
+                with open(message_file, 'r', encoding='utf-8') as f:
+                    raw_messages = json.load(f)
+                    
+                    for msg in raw_messages:
+                        if isinstance(msg, dict) and msg.get('encrypted'):
+                            if not self.crypto:
+                                raise ValueError("需要密码来解密消息")
+                            try:
+                                decrypted_msg = self.crypto.decrypt_message(msg['data'])
+                                all_messages.append(decrypted_msg)
+                            except ValueError as e:
+                                logger.error(f"解密消息失败: {str(e)}")
+                                all_messages.append({
+                                    'content': '【无法解密的消息】',
+                                    'author': '未知',
+                                    'timestamp': '未知'
+                                })
+                        else:
+                            all_messages.append(msg)
+            except Exception as e:
+                logger.error(f"读取消息文件 {file_name} 失败: {str(e)}")
+        
+        # 按时间戳排序所有消息
+        all_messages.sort(key=lambda x: x['timestamp'])
+        return all_messages 
