@@ -7,6 +7,7 @@ import time
 import requests
 from urllib3.util.retry import Retry
 from requests.adapters import HTTPAdapter
+from config import load_config
 from crypto_utils import MessageCrypto
 
 # 设置日志
@@ -61,12 +62,22 @@ class GitMessenger:
             # 根据URL判断是GitHub还是Gitee
             if 'github.com' in self.remote_url:
                 test_url = 'https://api.github.com'
+                response = session.get(test_url, timeout=10)
             elif 'gitee.com' in self.remote_url:
-                test_url = 'https://gitee.com/api/v5'
+                # Gitee API需要带上token才能访问
+                config = load_config()
+                if 'platforms' in config and 'Gitee' in config['platforms']:
+                    token = config['platforms']['Gitee']['token']
+                    test_url = 'https://gitee.com/api/v5/user'
+                    headers = {'Authorization': f'token {token}'}
+                    response = session.get(test_url, headers=headers, timeout=10)
+                else:
+                    # 如果没有配置Gitee，直接检查gitee.com是否可访问
+                    test_url = 'https://gitee.com'
+                    response = session.get(test_url, timeout=10)
             else:
                 raise ValueError("不支持的Git服务商，目前仅支持GitHub和Gitee")
             
-            response = session.get(test_url, timeout=10)
             response.raise_for_status()
             return True
         except Exception as e:

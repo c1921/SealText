@@ -151,16 +151,55 @@ def update_config():
                 if platform_choice == '0':
                     break
                 elif platform_choice == 'A':
-                    # 添加新平台（使用与setup_config相同的逻辑）
                     print("\n支持的平台：")
                     print("1. GitHub")
                     print("2. Gitee")
-                    # ... 添加平台的代码 ...
+                    new_platform = input("请选择要添加的平台 (1/2): ").strip()
+                    
+                    if new_platform == '1':
+                        platform_name = 'GitHub'
+                        api_url = 'https://api.github.com'
+                        token_url = 'https://github.com/settings/tokens'
+                    elif new_platform == '2':
+                        platform_name = 'Gitee'
+                        api_url = 'https://gitee.com/api/v5'
+                        token_url = 'https://gitee.com/profile/personal_access_tokens'
+                    else:
+                        print("❌ 无效的选择！")
+                        continue
+                    
+                    # 检查平台是否已存在
+                    if platform_name in config['platforms']:
+                        print(f"❌ {platform_name}平台已配置！如需修改请使用'M'选项")
+                        continue
+                    
+                    username = input(f"请输入{platform_name}用户名: ").strip()
+                    print(f"\n获取{platform_name}令牌:")
+                    print(f"1. 访问 {token_url}")
+                    print("2. 生成新的访问令牌")
+                    print("3. 设置必要的权限（repo/projects）")
+                    token = input("请输入访问令牌: ").strip()
+                    
+                    if username and token:
+                        config['platforms'][platform_name] = {
+                            'username': username,
+                            'token': token,
+                            'api_url': api_url
+                        }
+                        save_config(config)
+                        print(f"✅ {platform_name}平台配置已保存")
+                    
                 elif platform_choice == 'D':
                     platform_name = input("请输入要删除的平台名称: ").strip()
                     if platform_name in config['platforms']:
-                        del config['platforms'][platform_name]
-                        print(f"✅ {platform_name}配置已删除")
+                        confirm = input(f"确定要删除{platform_name}平台配置吗？(y/n): ").strip().lower()
+                        if confirm == 'y':
+                            del config['platforms'][platform_name]
+                            save_config(config)
+                            print(f"✅ {platform_name}配置已删除")
+                    else:
+                        print("❌ 未找到指定的平台！")
+                
                 elif platform_choice == 'M':
                     platform_name = input("请输入要修改的平台名称: ").strip()
                     if platform_name in config['platforms']:
@@ -170,7 +209,13 @@ def update_config():
                             config['platforms'][platform_name]['username'] = username
                         if token:
                             config['platforms'][platform_name]['token'] = token
+                        save_config(config)
                         print(f"✅ {platform_name}配置已更新")
+                    else:
+                        print("❌ 未找到指定的平台！")
+                
+                else:
+                    print("❌ 无效的操作！")
         
         elif choice == '2':
             name = input("请输入新的显示名称: ").strip()
