@@ -207,9 +207,9 @@ class GitMessenger:
             else:
                 messages = []
             
-            # 创建消息字典
+            # 创建消息字典，确保消息内容没有多余的空格
             message_dict = {
-                'content': message,
+                'content': message.strip(),  # 移除首尾空白
                 'author': author,
                 'timestamp': datetime.now().isoformat()
             }
