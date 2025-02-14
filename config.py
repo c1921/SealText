@@ -1,22 +1,70 @@
 import json
 import os
 from crypto_utils import MessageCrypto
+from cryptography.fernet import Fernet
 
 # 将配置文件放在用户主目录下的 .gitchat 文件夹中
 CONFIG_DIR = os.path.expanduser('~/.gitchat')
 CONFIG_FILE = os.path.join(CONFIG_DIR, 'config.json')
+KEY_FILE = os.path.join(CONFIG_DIR, '.key')
+
+def get_config_key():
+    """获取或创建配置加密密钥"""
+    if os.path.exists(KEY_FILE):
+        with open(KEY_FILE, 'r') as f:
+            return f.read().strip()
+    else:
+        key = MessageCrypto.generate_config_key()
+        os.makedirs(CONFIG_DIR, exist_ok=True)
+        # 设置密钥文件权限（仅当前用户可读写）
+        with open(KEY_FILE, 'w') as f:
+            f.write(key)
+        os.chmod(KEY_FILE, 0o600)
+        return key
 
 def load_config():
-    if os.path.exists(CONFIG_FILE):
+    """加载并解密配置"""
+    if not os.path.exists(CONFIG_FILE):
+        return {}
+    
+    try:
+        # 读取加密的配置文件
         with open(CONFIG_FILE, 'r') as f:
-            return json.load(f)
-    return {}
+            encrypted_data = f.read().strip()
+        
+        if not encrypted_data:
+            return {}
+        
+        # 使用配置密钥解密
+        fernet = Fernet(get_config_key())
+        decrypted_bytes = fernet.decrypt(encrypted_data.encode())
+        return json.loads(decrypted_bytes.decode('utf-8'))
+    except Exception as e:
+        print(f"⚠️ 配置文件损坏或被篡改: {str(e)}")
+        return {}
 
 def save_config(config):
-    # 确保配置目录存在
-    os.makedirs(CONFIG_DIR, exist_ok=True)
-    with open(CONFIG_FILE, 'w') as f:
-        json.dump(config, f, indent=2)
+    """加密并保存配置"""
+    try:
+        # 确保配置目录存在
+        os.makedirs(CONFIG_DIR, exist_ok=True)
+        
+        # 加密配置数据
+        fernet = Fernet(get_config_key())
+        encrypted_data = fernet.encrypt(
+            json.dumps(config, ensure_ascii=False).encode('utf-8')
+        )
+        
+        # 保存加密的配置文件
+        with open(CONFIG_FILE, 'w') as f:
+            f.write(encrypted_data.decode('utf-8'))
+        
+        # 设置配置文件权限（仅当前用户可读写）
+        os.chmod(CONFIG_FILE, 0o600)
+        
+    except Exception as e:
+        print(f"❌ 保存配置失败: {str(e)}")
+        raise
 
 def get_default_repo_path():
     """获取默认的仓库保存路径"""

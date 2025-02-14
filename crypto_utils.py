@@ -4,6 +4,7 @@ import base64
 import json
 import hashlib
 from mnemonic import Mnemonic
+import os
 
 class MessageCrypto:
     def __init__(self, mnemonic_words):
@@ -67,4 +68,22 @@ class MessageCrypto:
             
             return message_dict
         except Exception as e:
-            raise ValueError(f"解密或验证失败：{str(e)}") 
+            raise ValueError(f"解密或验证失败：{str(e)}")
+
+    def encrypt_config(self, config_dict):
+        """加密配置字典"""
+        config_bytes = json.dumps(config_dict, ensure_ascii=False).encode('utf-8')
+        return self.fernet.encrypt(config_bytes).decode('utf-8')
+
+    def decrypt_config(self, encrypted_config):
+        """解密配置字典"""
+        try:
+            decrypted_bytes = self.fernet.decrypt(encrypted_config.encode('utf-8'))
+            return json.loads(decrypted_bytes.decode('utf-8'))
+        except Exception as e:
+            raise ValueError(f"配置解密失败：{str(e)}")
+
+    @staticmethod
+    def generate_config_key():
+        """生成用于加密配置文件的密钥"""
+        return base64.urlsafe_b64encode(os.urandom(32)).decode('utf-8') 
