@@ -69,7 +69,6 @@ class GitChat:
         print("==============")
 
 def run_chat():
-    print("=== Git 聊天工具 ===")
     
     # 检查是否需要修改配置
     if os.path.exists(os.path.join(os.path.expanduser('~/.gitchat'), 'config.json')):
@@ -157,12 +156,4 @@ def run_chat():
         elif user_input:
             if chat.send_message(user_input, config['display_name']):
                 chat.display_messages()
-                last_update = time.time()
-
-if __name__ == "__main__":
-    try:
-        run_chat()
-    except KeyboardInterrupt:
-        print("\n👋 程序已退出")
-    except Exception as e:
-        print(f"\n❌ 发生错误: {str(e)}") 
+                last_update = time.time() 
