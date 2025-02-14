@@ -9,6 +9,7 @@ from urllib3.util.retry import Retry
 from requests.adapters import HTTPAdapter
 from config import load_config
 from crypto_utils import MessageCrypto
+import hashlib
 
 # 设置日志
 logging.basicConfig(level=logging.DEBUG)
@@ -207,22 +208,25 @@ class GitMessenger:
             else:
                 messages = []
             
-            # 创建消息字典，确保消息内容没有多余的空格
+            # 获取前一条消息的哈希值
+            prev_hash = None
+            if messages:
+                try:
+                    decrypted_msg = self.crypto.decrypt_message(messages[-1])
+                    prev_hash = decrypted_msg.get('hash')
+                except Exception as e:
+                    logger.error(f"获取前一条消息哈希失败: {str(e)}")
+            
+            # 创建消息字典
             message_dict = {
-                'content': message.strip(),  # 移除首尾空白
+                'content': message.strip(),
                 'author': author,
                 'timestamp': datetime.now().isoformat()
             }
             
-            # 如果启用了加密，加密整个消息
-            if self.crypto:
-                encrypted_message = self.crypto.encrypt_message(message_dict)
-                messages.append({
-                    'encrypted': True,
-                    'data': encrypted_message
-                })
-            else:
-                messages.append(message_dict)
+            # 加密消息并添加到消息列表
+            encrypted_message = self.crypto.encrypt_message(message_dict, prev_hash)
+            messages.append(encrypted_message)
             
             # 保存消息
             logger.debug("保存消息")
@@ -238,13 +242,6 @@ class GitMessenger:
             logger.debug("推送到远程仓库")
             origin.push()
             
-        except git.exc.GitCommandError as e:
-            logger.error(f"Git操作失败: {str(e)}")
-            if "no upstream branch" in str(e):
-                logger.debug("尝试设置上游分支")
-                self.repo.git.push('--set-upstream', 'origin', 'main')
-            else:
-                raise
         except Exception as e:
             logger.error(f"发送消息失败: {str(e)}")
             raise
@@ -259,28 +256,34 @@ class GitMessenger:
                         if f.startswith('messages_') and f.endswith('.json')]
         
         all_messages = []
+        prev_hash = None
+        
         for file_name in message_files:
             message_file = os.path.join(self.repo_path, file_name)
             try:
                 with open(message_file, 'r', encoding='utf-8') as f:
                     raw_messages = json.load(f)
                     
-                    for msg in raw_messages:
-                        if isinstance(msg, dict) and msg.get('encrypted'):
-                            if not self.crypto:
-                                raise ValueError("需要密码来解密消息")
-                            try:
-                                decrypted_msg = self.crypto.decrypt_message(msg['data'])
-                                all_messages.append(decrypted_msg)
-                            except ValueError as e:
-                                logger.error(f"解密消息失败: {str(e)}")
-                                all_messages.append({
-                                    'content': '【无法解密的消息】',
-                                    'author': '未知',
-                                    'timestamp': '未知'
-                                })
-                        else:
-                            all_messages.append(msg)
+                    for encrypted_msg in raw_messages:
+                        try:
+                            decrypted_msg = self.crypto.decrypt_message(encrypted_msg)
+                            
+                            # 验证哈希链
+                            if prev_hash and decrypted_msg.get('prev_hash') != prev_hash:
+                                logger.error("哈希链断裂，消息可能被篡改")
+                                decrypted_msg['content'] = '【警告：消息完整性验证失败】'
+                            
+                            prev_hash = decrypted_msg.get('hash')
+                            all_messages.append(decrypted_msg)
+                            
+                        except ValueError as e:
+                            logger.error(f"解密消息失败: {str(e)}")
+                            all_messages.append({
+                                'content': '【无法解密或验证的消息】',
+                                'author': '未知',
+                                'timestamp': '未知'
+                            })
+                            
             except Exception as e:
                 logger.error(f"读取消息文件 {file_name} 失败: {str(e)}")
         
