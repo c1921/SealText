@@ -15,21 +15,25 @@ from config import (
 )
 
 class GitChat:
-    def __init__(self, repo_url, platform_name, username=None, token=None, password=None):
+    def __init__(self, repo_url, platform_name, username=None, token=None):
         self.repo_url = repo_url
         self.platform_name = platform_name
         config = load_config()
         self.local_path = config.get('repo_path', os.path.expanduser('~/.gitchat/repos'))
         self.messenger = None
-        self._setup_repo(username, token, password)
+        self._setup_repo(username, token)
     
-    def _setup_repo(self, username, token, password):
+    def _setup_repo(self, username, token):
         try:
-            # 使用仓库名作为本地文件夹名
             repo_name = self.repo_url.split('/')[-1].replace('.git', '')
             repo_path = os.path.join(self.local_path, f"{self.platform_name.lower()}_{repo_name}")
             
-            self.messenger = GitMessenger(repo_path, self.repo_url, username, token, password)
+            config = load_config()
+            if not config.get('mnemonic'):
+                print("❌ 未找到助记词配置！")
+                sys.exit(1)
+            
+            self.messenger = GitMessenger(repo_path, self.repo_url, username, token, config['mnemonic'])
             print("✅ 仓库连接成功！")
             print(f"📂 本地仓库路径: {repo_path}")
         except Exception as e:
@@ -126,8 +130,7 @@ def run_chat():
         repo_url,
         platform_name,
         platform_info['username'],
-        platform_info['token'],
-        config['chat_password']
+        platform_info['token']
     )
     
     print("\n🎉 欢迎使用Git聊天工具！")

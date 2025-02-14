@@ -16,12 +16,12 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 class GitMessenger:
-    def __init__(self, repo_path, remote_url=None, username=None, token=None, password=None):
+    def __init__(self, repo_path, remote_url=None, username=None, token=None, mnemonic=None):
         self.repo_path = repo_path
         self.remote_url = remote_url
         self.username = username
         self.token = token
-        self.crypto = MessageCrypto(password) if password else None
+        self.crypto = MessageCrypto(mnemonic) if mnemonic else None
         
         # 配置 git 的全局设置
         self._configure_git()

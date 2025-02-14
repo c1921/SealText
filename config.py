@@ -1,5 +1,6 @@
 import json
 import os
+from crypto_utils import MessageCrypto
 
 # 将配置文件放在用户主目录下的 .gitchat 文件夹中
 CONFIG_DIR = os.path.expanduser('~/.gitchat')
@@ -30,7 +31,7 @@ def setup_config():
             'platforms': {},      # 存储多个平台的配置
             'display_name': '',   # 聊天显示名称
             'repo_path': '',      # 仓库保存路径
-            'chat_password': '',  # 加密密码
+            'mnemonic': '',      # 助记词
             'repos': {}          # 存储每个平台的所有仓库
         }
     
@@ -49,9 +50,16 @@ def setup_config():
             if not config['display_name']:
                 print("❌ 需要设置显示名称！")
                 continue
-            if not config['chat_password']:
-                print("❌ 需要设置加密密码！")
-                continue
+            if not config['mnemonic']:
+                # 生成新的助记词
+                mnemonic = MessageCrypto.generate_mnemonic()
+                print("\n⚠️ 请妥善保管以下助记词，它用于消息加密，丢失将无法恢复消息！")
+                print(f"助记词: {mnemonic}")
+                confirm = input("\n请确认已安全保存助记词 (y/n): ").strip().lower()
+                if confirm != 'y':
+                    continue
+                config['mnemonic'] = mnemonic
+                save_config(config)  # 立即保存配置
             break
             
         elif choice == '1':
@@ -86,6 +94,7 @@ def setup_config():
                     'token': token,
                     'api_url': api_url
                 }
+                save_config(config)  # 立即保存配置
                 print(f"✅ {platform_name}配置已保存")
             
         elif choice == '2':
@@ -103,16 +112,22 @@ def setup_config():
             os.makedirs(repo_path, exist_ok=True)
             config['repo_path'] = repo_path
             
-            chat_password = input("请设置聊天加密密码: ").strip()
-            if chat_password:
-                config['chat_password'] = chat_password
+            # 如果已有助记词，可以选择更换
+            if config.get('mnemonic'):
+                if input("\n是否需要更换助记词？(y/n): ").strip().lower() == 'y':
+                    mnemonic = MessageCrypto.generate_mnemonic()
+                    print("\n⚠️ 请妥善保管以下助记词，它用于消息加密，丢失将无法恢复消息！")
+                    print(f"助记词: {mnemonic}")
+                    confirm = input("\n请确认已安全保存助记词 (y/n): ").strip().lower()
+                    if confirm == 'y':
+                        config['mnemonic'] = mnemonic
+                        print("✅ 助记词已更新")
+            
+            save_config(config)  # 立即保存配置
         
         else:
             print("❌ 无效的选择！")
             continue
-        
-        # 保存配置
-        save_config(config)
     
     return config
 
@@ -128,7 +143,7 @@ def update_config():
         print("1. 管理Git平台")
         print("2. 修改显示名称")
         print("3. 修改仓库路径")
-        print("4. 修改加密密码")
+        print("4. 更换助记词")
         print("0. 完成修改")
         
         choice = input("\n请选择要修改的项目 (0-4): ").strip()
@@ -230,15 +245,24 @@ def update_config():
                 config['repo_path'] = path
                 
         elif choice == '4':
-            password = input("请输入新的聊天加密密码: ").strip()
-            if password:
-                config['chat_password'] = password
+            print("\n⚠️ 更换助记词将导致无法解密之前的消息！")
+            if input("是否确定要更换助记词？(y/n): ").strip().lower() == 'y':
+                mnemonic = MessageCrypto.generate_mnemonic()
+                print("\n新的助记词: ")
+                print(mnemonic)
+                confirm = input("\n请确认已安全保存助记词 (y/n): ").strip().lower()
+                if confirm == 'y':
+                    config['mnemonic'] = mnemonic
+                    print("✅ 助记词已更新")
         
-        # 保存更新后的配置
+        else:
+            print("❌ 无效的选择！")
+            continue
+        
         save_config(config)
         print("✅ 配置已更新")
     
-    return config 
+    return config
 
 def save_recent_repo(platform_name, repo_url):
     """保存仓库地址"""
