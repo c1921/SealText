@@ -37,14 +37,8 @@ class ChatWindow(QMainWindow):
         
         # 在UI初始化完成后，手动触发平台切换事件
         if self.platform_combo.count() > 0:
+            # 不再在这里直接连接仓库
             self.on_platform_changed(self.platform_combo.currentText())
-            # 确保选中第一个仓库
-            if self.repo_combo.count() > 0:
-                self.repo_combo.setCurrentIndex(0)
-                # 手动连接第一个仓库
-                url = self.repo_combo.itemData(0)
-                if url:
-                    self.connect_to_repo(url)
     
     def setup_ui(self):
         # 创建中央部件
@@ -140,10 +134,10 @@ class ChatWindow(QMainWindow):
         # 添加"添加新仓库"选项
         self.repo_combo.addItem("+ 添加新仓库...", None)
         
-        # 如果有仓库，自动连接第一个
+        # 如果有仓库，选择第一个
         if repos:
-            # 不需要手动调用connect_to_repo，因为会触发on_repo_changed
             self.repo_combo.setCurrentIndex(0)
+            # on_repo_changed 会被自动触发，不需要在这里手动连接
     
     def on_repo_changed(self, index):
         """仓库切换时的处理"""
