@@ -268,79 +268,28 @@ def update_repo_note(platform_name, repo_url, config):
             print("✅ 备注已更新")
 
 def get_repo_url(platform_name, config):
-    """获取仓库地址，支持选择已有仓库"""
+    """获取仓库地址，简化为命令行输入"""
     repos = config.get('repos', {}).get(platform_name, {})
     
     if repos:
-        while True:
-            print("\n已保存的仓库：")
-            # 将字典转换为列表，便于分页显示
-            repo_list = [(url, note) for url, note in repos.items()]
-            repo_list.sort()  # 按仓库地址排序
-            
-            # 分页显示仓库列表
-            page_size = 10
-            total_pages = (len(repo_list) + page_size - 1) // page_size
-            page = 1
-            
-            while True:
-                start_idx = (page - 1) * page_size
-                end_idx = min(start_idx + page_size, len(repo_list))
-                
-                print(f"\n=== 第 {page}/{total_pages} 页 ===")
-                for i, (url, note) in enumerate(repo_list[start_idx:end_idx], start_idx + 1):
-                    note_text = f"【{note}】" if note else ""
-                    print(f"{i}. {note_text}{url}")
-                
-                print("\n操作：")
-                if total_pages > 1:
-                    if page > 1:
-                        print("p. 上一页")
-                    if page < total_pages:
-                        print("n. 下一页")
-                print("a. 添加新仓库")
-                print("m. 修改备注")
-                print("q. 返回主菜单")
-                
-                choice = input("\n请选择 (输入序号或操作): ").strip().lower()
-                
-                if choice == 'q':
-                    return None
-                elif choice == 'a':
-                    break
-                elif choice == 'p' and page > 1:
-                    page -= 1
-                    continue
-                elif choice == 'n' and page < total_pages:
-                    page += 1
-                    continue
-                elif choice == 'm':
-                    repo_idx = input("请输入要修改备注的仓库序号: ").strip()
-                    try:
-                        idx = int(repo_idx) - 1
-                        if 0 <= idx < len(repo_list):
-                            url, _ = repo_list[idx]
-                            update_repo_note(platform_name, url, config)
-                            continue
-                        else:
-                            print("❌ 无效的序号！")
-                    except ValueError:
-                        print("❌ 请输入数字！")
-                    continue
-                
-                try:
-                    idx = int(choice) - 1
-                    if 0 <= idx < len(repo_list):
-                        return repo_list[idx][0]  # 返回仓库地址
-                    else:
-                        print("❌ 无效的选择！")
-                except ValueError:
-                    print("❌ 请输入有效的选项！")
-            
-            if choice == 'a':
-                break
+        print("\n已保存的仓库：")
+        for i, (url, note) in enumerate(repos.items(), 1):
+            note_text = f"【{note}】" if note else ""
+            print(f"{i}. {note_text}{url}")
+        print("0. 添加新仓库")
+        
+        choice = input("\n请选择 (输入序号): ").strip()
+        if choice == '0':
+            pass  # 继续执行下面的新仓库输入
+        else:
+            try:
+                idx = int(choice) - 1
+                urls = list(repos.keys())
+                if 0 <= idx < len(urls):
+                    return urls[idx]
+            except ValueError:
+                pass
     
-    # 输入新的仓库地址
-    print("\n请输入仓库地址，格式如下：")
+    print(f"\n请输入仓库地址，格式如下：")
     print(f"{platform_name}: https://{platform_name.lower()}.com/用户名/仓库名.git")
     return input("请输入仓库地址: ").strip() 
