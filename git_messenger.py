@@ -210,7 +210,7 @@ class GitMessenger:
             else:
                 messages = []
             
-            # 获取前一条消息的哈希值
+            # 获取当前文件中最后一条消息的哈希值
             prev_hash = None
             if messages:
                 try:
@@ -258,7 +258,6 @@ class GitMessenger:
                         if f.startswith('messages_') and f.endswith('.json')]
         
         all_messages = []
-        prev_hash = None
         
         for file_name in message_files:
             message_file = os.path.join(self.repo_path, file_name)
@@ -266,13 +265,15 @@ class GitMessenger:
                 with open(message_file, 'r', encoding='utf-8') as f:
                     raw_messages = json.load(f)
                     
+                    # 每个文件独立维护哈希链
+                    prev_hash = None
                     for encrypted_msg in raw_messages:
                         try:
                             decrypted_msg = self.crypto.decrypt_message(encrypted_msg)
                             
-                            # 验证哈希链
+                            # 只验证同一文件内的哈希链
                             if prev_hash and decrypted_msg.get('prev_hash') != prev_hash:
-                                logger.error("哈希链断裂，消息可能被篡改")
+                                logger.error(f"文件 {file_name} 的哈希链断裂，消息可能被篡改")
                                 decrypted_msg['content'] = '【警告：消息完整性验证失败】'
                             
                             prev_hash = decrypted_msg.get('hash')
