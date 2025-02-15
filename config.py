@@ -2,6 +2,7 @@ import json
 import os
 from crypto_utils import MessageCrypto
 from cryptography.fernet import Fernet
+import base64
 
 # 将配置文件放在用户主目录下的 .gitchat 文件夹中
 CONFIG_DIR = os.path.expanduser('~/.gitchat')
@@ -14,9 +15,9 @@ def get_config_key():
         with open(KEY_FILE, 'r') as f:
             return f.read().strip()
     else:
-        key = MessageCrypto.generate_config_key()
+        # 使用随机生成的密钥而不是助记词
+        key = base64.urlsafe_b64encode(os.urandom(32)).decode('utf-8')
         os.makedirs(CONFIG_DIR, exist_ok=True)
-        # 设置密钥文件权限（仅当前用户可读写）
         with open(KEY_FILE, 'w') as f:
             f.write(key)
         os.chmod(KEY_FILE, 0o600)
@@ -79,7 +80,6 @@ def setup_config():
             'platforms': {},      # 存储多个平台的配置
             'display_name': '',   # 聊天显示名称
             'repo_path': '',      # 仓库保存路径
-            'mnemonic': '',      # 助记词
             'repos': {}          # 存储每个平台的所有仓库
         }
     
@@ -98,16 +98,6 @@ def setup_config():
             if not config['display_name']:
                 print("❌ 需要设置显示名称！")
                 continue
-            if not config['mnemonic']:
-                # 生成新的助记词
-                mnemonic = MessageCrypto.generate_mnemonic()
-                print("\n⚠️ 请妥善保管以下助记词，它用于消息加密，丢失将无法恢复消息！")
-                print(f"助记词: {mnemonic}")
-                confirm = input("\n请确认已安全保存助记词 (y/n): ").strip().lower()
-                if confirm != 'y':
-                    continue
-                config['mnemonic'] = mnemonic
-                save_config(config)  # 立即保存配置
             break
             
         elif choice == '1':
@@ -160,17 +150,6 @@ def setup_config():
             os.makedirs(repo_path, exist_ok=True)
             config['repo_path'] = repo_path
             
-            # 如果已有助记词，可以选择更换
-            if config.get('mnemonic'):
-                if input("\n是否需要更换助记词？(y/n): ").strip().lower() == 'y':
-                    mnemonic = MessageCrypto.generate_mnemonic()
-                    print("\n⚠️ 请妥善保管以下助记词，它用于消息加密，丢失将无法恢复消息！")
-                    print(f"助记词: {mnemonic}")
-                    confirm = input("\n请确认已安全保存助记词 (y/n): ").strip().lower()
-                    if confirm == 'y':
-                        config['mnemonic'] = mnemonic
-                        print("✅ 助记词已更新")
-            
             save_config(config)  # 立即保存配置
         
         else:
@@ -191,10 +170,9 @@ def update_config():
         print("1. 管理Git平台")
         print("2. 修改显示名称")
         print("3. 修改仓库路径")
-        print("4. 更换助记词")
         print("0. 完成修改")
         
-        choice = input("\n请选择要修改的项目 (0-4): ").strip()
+        choice = input("\n请选择要修改的项目 (0-3): ").strip()
         
         if choice == '0':
             break
@@ -292,17 +270,6 @@ def update_config():
                 os.makedirs(path, exist_ok=True)
                 config['repo_path'] = path
                 
-        elif choice == '4':
-            print("\n⚠️ 更换助记词将导致无法解密之前的消息！")
-            if input("是否确定要更换助记词？(y/n): ").strip().lower() == 'y':
-                mnemonic = MessageCrypto.generate_mnemonic()
-                print("\n新的助记词: ")
-                print(mnemonic)
-                confirm = input("\n请确认已安全保存助记词 (y/n): ").strip().lower()
-                if confirm == 'y':
-                    config['mnemonic'] = mnemonic
-                    print("✅ 助记词已更新")
-        
         else:
             print("❌ 无效的选择！")
             continue
@@ -312,21 +279,23 @@ def update_config():
     
     return config
 
-def save_recent_repo(platform_name, repo_url):
-    """保存仓库地址"""
+def save_recent_repo(platform_name, repo_url, chat_mnemonic=None):
+    """保存仓库地址和助记词"""
     config = load_config()
     if 'repos' not in config:
         config['repos'] = {}
     
     if platform_name not in config['repos']:
-        config['repos'][platform_name] = {}  # 改用字典存储，key为仓库地址，value为备注
+        config['repos'][platform_name] = {}
     
-    # 如果是新仓库，添加到字典中并请求备注
+    # 保存仓库信息
     if repo_url not in config['repos'][platform_name]:
         note = input("\n为仓库添加备注（直接回车跳过）: ").strip()
-        config['repos'][platform_name][repo_url] = note
-    
-    save_config(config)
+        config['repos'][platform_name][repo_url] = {
+            'note': note,
+            'mnemonic': chat_mnemonic
+        }
+        save_config(config)
 
 def update_repo_note(platform_name, repo_url, config):
     """更新仓库备注"""
@@ -340,13 +309,13 @@ def update_repo_note(platform_name, repo_url, config):
             print("✅ 备注已更新")
 
 def get_repo_url(platform_name, config):
-    """获取仓库地址，简化为命令行输入"""
+    """获取仓库地址和助记词"""
     repos = config.get('repos', {}).get(platform_name, {})
     
     if repos:
         print("\n已保存的仓库：")
-        for i, (url, note) in enumerate(repos.items(), 1):
-            note_text = f"【{note}】" if note else ""
+        for i, (url, info) in enumerate(repos.items(), 1):
+            note_text = f"【{info.get('note')}】" if info.get('note') else ""
             print(f"{i}. {note_text}{url}")
         print("0. 添加新仓库")
         
@@ -358,10 +327,11 @@ def get_repo_url(platform_name, config):
                 idx = int(choice) - 1
                 urls = list(repos.keys())
                 if 0 <= idx < len(urls):
-                    return urls[idx]
+                    url = urls[idx]
+                    return url, repos[url].get('mnemonic')
             except ValueError:
                 pass
     
     print(f"\n请输入仓库地址，格式如下：")
     print(f"{platform_name}: https://{platform_name.lower()}.com/用户名/仓库名.git")
-    return input("请输入仓库地址: ").strip() 
+    return input("请输入仓库地址: ").strip(), None 

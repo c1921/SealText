@@ -10,18 +10,20 @@ from requests.adapters import HTTPAdapter
 from config import load_config
 from crypto_utils import MessageCrypto
 import hashlib
+import sys
 
 # 设置日志
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 class GitMessenger:
-    def __init__(self, repo_path, remote_url=None, username=None, token=None, mnemonic=None):
+    def __init__(self, repo_path, remote_url=None, username=None, token=None, chat_mnemonic=None):
         self.repo_path = repo_path
         self.remote_url = remote_url
         self.username = username
         self.token = token
-        self.crypto = MessageCrypto(mnemonic) if mnemonic else None
+        # 只使用聊天助记词
+        self.crypto = MessageCrypto(chat_mnemonic) if chat_mnemonic else None
         
         # 配置 git 的全局设置
         self._configure_git()
@@ -289,4 +291,21 @@ class GitMessenger:
         
         # 按时间戳排序所有消息
         all_messages.sort(key=lambda x: x['timestamp'])
-        return all_messages 
+        return all_messages
+
+def _setup_repo(self, username, token, chat_mnemonic):
+    try:
+        repo_name = self.repo_url.split('/')[-1].replace('.git', '')
+        repo_path = os.path.join(self.local_path, f"{self.platform_name.lower()}_{repo_name}")
+        
+        # 移除配置助记词检查
+        if not chat_mnemonic:
+            print("❌ 未找到聊天助记词！")
+            sys.exit(1)
+        
+        self.messenger = GitMessenger(repo_path, self.repo_url, username, token, chat_mnemonic)
+        print("✅ 仓库连接成功！")
+        print(f"📂 本地仓库路径: {repo_path}")
+    except Exception as e:
+        print(f"❌ 仓库连接失败: {str(e)}")
+        sys.exit(1) 
