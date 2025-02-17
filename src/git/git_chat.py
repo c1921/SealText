@@ -4,8 +4,8 @@ import json
 from datetime import datetime
 import time
 import sys
-from git_messenger import GitMessenger
-from config import (
+from src.git.git_messenger import GitMessenger
+from src.config import (
     load_config, 
     save_config, 
     setup_config, 
@@ -13,7 +13,7 @@ from config import (
     save_recent_repo,
     get_repo_url
 )
-from crypto_utils import MessageCrypto
+from src.crypto.crypto_utils import MessageCrypto
 
 class GitChat:
     def __init__(self, repo_url, platform_name, username=None, token=None, chat_mnemonic=None):

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import sys
 import os
-from git_chat import run_chat
+from src.git.git_chat import run_chat
 
 def print_banner():
     """打印程序启动横幅"""

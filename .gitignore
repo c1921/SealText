@@ -70,3 +70,5 @@ dmypy.json
 
 # Configuration
 config.json
+
+version.txt

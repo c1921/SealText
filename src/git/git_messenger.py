@@ -7,8 +7,8 @@ import time
 import requests
 from urllib3.util.retry import Retry
 from requests.adapters import HTTPAdapter
-from config import load_config
-from crypto_utils import MessageCrypto
+from src.config import load_config
+from src.crypto.crypto_utils import MessageCrypto
 import hashlib
 import sys
 

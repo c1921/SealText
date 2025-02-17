@@ -1,6 +1,6 @@
 import json
 import os
-from crypto_utils import MessageCrypto
+from src.crypto.crypto_utils import MessageCrypto
 from cryptography.fernet import Fernet
 import base64
 
