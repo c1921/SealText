@@ -1,51 +1,62 @@
+import PyInstaller.__main__
 import os
 import sys
-import shutil
-from PyInstaller.__main__ import run
+from string import Template
+from version import *
 
-def clean_build():
-    """清理构建文件"""
-    dirs_to_clean = ['build', 'dist']
-    files_to_clean = ['SealText.spec']
+def generate_version_info():
+    """生成版本信息文件"""
+    # 添加版本信息日志
+    # 使用 sys.stdout.buffer.write 来处理编码问题
+    sys.stdout.buffer.write(f"当前版本号: {VERSION_STR}\n".encode('utf-8'))
     
-    for dir_name in dirs_to_clean:
-        if os.path.exists(dir_name):
-            shutil.rmtree(dir_name)
-    
-    for file_name in files_to_clean:
-        if os.path.exists(file_name):
-            os.remove(file_name)
+    try:
+        # 读取模板文件
+        with open('version_info.template', 'r', encoding='utf-8') as f:
+            template = Template(f.read())
+        
+        # 准备替换变量
+        version_tuple = VERSION + (0,)  # 添加一个0作为第四个版本号
+        variables = {
+            'VERSION_TUPLE': str(version_tuple),
+            'VERSION_STR': VERSION_STR,
+            'APP_NAME': APP_NAME,
+            'COMPANY': COMPANY,
+            'DESCRIPTION': DESCRIPTION,
+            'COPYRIGHT': COPYRIGHT
+        }
+        
+        # 替换变量生成最终内容
+        version_info = template.substitute(variables)
+        
+        # 写入文件
+        with open('version_info.txt', 'w', encoding='utf-8') as f:
+            f.write(version_info)
+            
+    except Exception as e:
+        sys.stderr.buffer.write(f"生成版本信息时出错: {str(e)}\n".encode('utf-8'))
+        raise
 
-def build():
-    """打包程序"""
-    # 清理旧的构建文件
-    clean_build()
-    
-    # PyInstaller 参数
-    args = [
-        'main.py',                    # 入口文件
-        '--name=SealText',            # 程序名称
-        '--onefile',                  # 打包成单个文件
-        '--icon=assets/icon.ico',     # 程序图标
-        '--add-data=README.md:.',     # 添加额外文件
-        '--clean',                    # 清理临时文件
-        '--noupx',                    # 不使用UPX压缩
-    ]
-    
-    # Windows 特定配置
-    if sys.platform.startswith('win'):
-        args.extend([
-            '--version-file=version.txt',  # 版本信息文件
-        ])
-    
-    # 运行打包
-    run(args)
-    
-    print("✅ 打包完成！")
-    if sys.platform.startswith('win'):
-        print("📦 输出文件: dist/SealText.exe")
-    else:
-        print("📦 输出文件: dist/SealText")
+# 设置默认编码为 UTF-8
+if sys.stdout.encoding != 'utf-8':
+    sys.stdout.reconfigure(encoding='utf-8')
 
-if __name__ == "__main__":
-    build() 
+# 生成版本信息
+generate_version_info()
+
+# 确保在正确的目录
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
+
+# 构建输出文件名
+output_name = f"SealText_v{VERSION_STR}"
+sys.stdout.buffer.write(f"构建输出文件名: {output_name}\n".encode('utf-8'))
+
+PyInstaller.__main__.run([
+    'main.py',
+    f'--name={output_name}',
+    '--onefile',
+    '--icon=assets/icon.ico',
+    '--version-file=version_info.txt',
+    '--clean',
+    '--noupx'
+]) 
