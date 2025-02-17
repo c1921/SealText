@@ -14,15 +14,19 @@ from src.config import (
     get_repo_url
 )
 from src.crypto.crypto_utils import MessageCrypto
+from rich.console import Console
+from rich.text import Text
 
 class GitChat:
     def __init__(self, repo_url, platform_name, username=None, token=None, chat_mnemonic=None):
         self.repo_url = repo_url
         self.platform_name = platform_name
-        config = load_config()
-        self.local_path = config.get('repo_path', os.path.expanduser('~/.gitchat/repos'))
+        self.username = username  # 添加用户名属性
+        self.config = load_config()  # 保存配置到实例变量
+        self.local_path = self.config.get('repo_path', os.path.expanduser('~/.gitchat/repos'))
         self.messenger = None
         self._setup_repo(username, token, chat_mnemonic)
+        self.console = Console()  # 初始化rich控制台
     
     def _setup_repo(self, username, token, chat_mnemonic):
         try:
@@ -59,14 +63,31 @@ class GitChat:
     def display_messages(self):
         messages = self.get_messages()
         if not messages:
-            print("\n暂无消息记录")
+            self.console.print("\n暂无消息记录", style="grey50")
             return
         
-        print("\n=== 消息记录 ===")
+        self.console.print("\n=== 消息记录 ===", style="grey50")
         for msg in messages:
+            # 创建一个富文本对象
+            message = Text()
+            
+            # 添加时间戳（灰色）
             timestamp = datetime.fromisoformat(msg['timestamp']).strftime('%Y-%m-%d %H:%M:%S')
-            print(f"[{timestamp}] {msg['author']}: {msg['content']}")
-        print("==============")
+            message.append(f"[{timestamp}] ", style="grey50")
+            
+            # 其他用户名使用橙色
+            author = msg['author']
+            if author != self.username and author != self.config.get('display_name'):
+                message.append(f"{author}: ", style="orange3")
+            else:
+                message.append(f"{author}: ", style="bright_green")
+            
+            # 消息内容使用默认颜色
+            message.append(msg['content'])
+            
+            self.console.print(message)
+        
+        self.console.print("================", style="grey50")
 
 def run_chat():
     # 检查是否需要修改配置
