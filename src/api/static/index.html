@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>SealText</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .config-panel {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .chat-panel {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .messages {
+            height: 400px;
+            overflow-y: auto;
+            padding: 20px;
+            border-bottom: 1px solid #eee;
+        }
+        .message {
+            margin-bottom: 10px;
+            padding: 8px;
+            border-radius: 4px;
+        }
+        .message .time {
+            color: #888;
+            font-size: 0.8em;
+        }
+        .message .author {
+            font-weight: bold;
+            margin-right: 8px;
+        }
+        .input-area {
+            padding: 20px;
+            display: flex;
+            gap: 10px;
+        }
+        input, button {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        input[type="text"] {
+            flex-grow: 1;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        .error {
+            color: red;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="config-panel">
+        <div>
+            <select id="platform" onchange="loadRepos()">
+                <option value="">选择平台...</option>
+            </select>
+            <select id="repo-url">
+                <option value="">选择仓库...</option>
+            </select>
+            <button onclick="initChat()">连接</button>
+        </div>
+        <div id="error" class="error"></div>
+    </div>
+
+    <div class="chat-panel">
+        <div id="messages" class="messages"></div>
+        <div class="input-area">
+            <input type="text" id="message" placeholder="输入消息..." onkeypress="handleKeyPress(event)">
+            <button onclick="sendMessage()">发送</button>
+        </div>
+    </div>
+
+    <script>
+        let messageUpdateInterval;
+        let config;
+
+        // 页面加载时获取配置
+        async function loadConfig() {
+            try {
+                const response = await fetch('/config');
+                config = await response.json();
+                
+                // 填充平台选择
+                const platformSelect = document.getElementById('platform');
+                platformSelect.innerHTML = '<option value="">选择平台...</option>' +
+                    config.platforms.map(p => `<option value="${p}">${p}</option>`).join('');
+            } catch (error) {
+                document.getElementById('error').textContent = '加载配置失败: ' + error.message;
+            }
+        }
+
+        // 根据选择的平台加载仓库列表
+        async function loadRepos() {
+            const platform = document.getElementById('platform').value;
+            const repoSelect = document.getElementById('repo-url');
+            
+            if (!platform) {
+                repoSelect.innerHTML = '<option value="">选择仓库...</option>';
+                return;
+            }
+
+            const repos = config.repos[platform] || {};
+            repoSelect.innerHTML = '<option value="">选择仓库...</option>' +
+                Object.entries(repos).map(([url, info]) => 
+                    `<option value="${url}">${info.note || url}</option>`
+                ).join('');
+        }
+
+        async function initChat() {
+            const platform = document.getElementById('platform').value;
+            const repoUrl = document.getElementById('repo-url').value;
+            
+            if (!platform || !repoUrl) {
+                document.getElementById('error').textContent = '请选择平台和仓库';
+                return;
+            }
+
+            try {
+                const response = await fetch('/init?' + new URLSearchParams({
+                    platform: platform,
+                    repo_url: repoUrl
+                }), {
+                    method: 'POST'
+                });
+
+                if (response.ok) {
+                    document.getElementById('error').textContent = '连接成功！';
+                    startMessageUpdates();
+                } else {
+                    const error = await response.json();
+                    document.getElementById('error').textContent = error.detail;
+                }
+            } catch (error) {
+                document.getElementById('error').textContent = error.message;
+            }
+        }
+
+        async function sendMessage() {
+            const messageInput = document.getElementById('message');
+            const message = messageInput.value.trim();
+            
+            if (!message) return;
+
+            try {
+                const response = await fetch('/messages?message=' + encodeURIComponent(message), {
+                    method: 'POST'
+                });
+
+                if (response.ok) {
+                    messageInput.value = '';
+                    updateMessages();
+                }
+            } catch (error) {
+                document.getElementById('error').textContent = error.message;
+            }
+        }
+
+        async function updateMessages() {
+            try {
+                const response = await fetch('/messages');
+                const messages = await response.json();
+                
+                const messagesDiv = document.getElementById('messages');
+                messagesDiv.innerHTML = messages.map(msg => `
+                    <div class="message">
+                        <span class="time">[${new Date(msg.timestamp).toLocaleString()}]</span>
+                        <span class="author">${msg.author}:</span>
+                        <span class="content">${msg.content}</span>
+                    </div>
+                `).join('');
+                
+                messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            } catch (error) {
+                console.error('获取消息失败:', error);
+            }
+        }
+
+        function startMessageUpdates() {
+            updateMessages();
+            messageUpdateInterval = setInterval(updateMessages, 5000);
+        }
+
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        }
+
+        // 页面加载时初始化
+        loadConfig();
+    </script>
+</body>
+</html> 

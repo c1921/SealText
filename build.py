@@ -37,26 +37,53 @@ def generate_version():
         sys.stderr.buffer.write(f"生成版本信息时出错: {str(e)}\n".encode('utf-8'))
         raise
 
-# 设置默认编码为 UTF-8
-if sys.stdout.encoding != 'utf-8':
-    sys.stdout.reconfigure(encoding='utf-8')
+def build_cli():
+    """构建命令行版本"""
+    output_name = f"SealText_CLI_v{VERSION_STR}"
+    PyInstaller.__main__.run([
+        'main.py',
+        f'--name={output_name}',
+        '--onefile',
+        '--icon=assets/icon.ico',
+        '--version-file=versioning/version.txt',
+        '--clean',
+        '--noupx'
+    ])
 
-# 生成版本信息
-generate_version()
+def build_web():
+    """构建Web版本"""
+    output_name = f"SealText_Web_v{VERSION_STR}"
+    static_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'src', 'api', 'static')
+    
+    if not os.path.exists(static_path):
+        os.makedirs(static_path)
+        print(f"创建静态文件目录: {static_path}")
+    
+    PyInstaller.__main__.run([
+        'run_api.py',
+        f'--name={output_name}',
+        '--onefile',
+        '--icon=assets/icon.ico',
+        '--version-file=versioning/version.txt',
+        '--clean',
+        '--noupx',
+        f'--add-data={static_path};src/api/static',  # 使用绝对路径
+        '--console'  # 添加此参数以显示控制台窗口，方便调试
+    ])
 
-# 确保在正确的目录
-os.chdir(os.path.dirname(os.path.abspath(__file__)))
+if __name__ == "__main__":
+    # 设置默认编码为 UTF-8
+    if sys.stdout.encoding != 'utf-8':
+        sys.stdout.reconfigure(encoding='utf-8')
 
-# 构建输出文件名
-output_name = f"SealText_v{VERSION_STR}"
-sys.stdout.buffer.write(f"构建输出文件名: {output_name}\n".encode('utf-8'))
+    # 生成版本信息
+    generate_version()
 
-PyInstaller.__main__.run([
-    'main.py',
-    f'--name={output_name}',
-    '--onefile',
-    '--icon=assets/icon.ico',
-    '--version-file=versioning/version.txt',
-    '--clean',
-    '--noupx'
-]) 
+    # 确保在正确的目录
+    os.chdir(os.path.dirname(os.path.abspath(__file__)))
+
+    # 构建两个版本
+    print("构建命令行版本...")
+    build_cli()
+    print("构建Web版本...")
+    build_web() 
