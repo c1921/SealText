@@ -9,6 +9,7 @@ from src.git.git_chat import GitChat
 from src.config import load_config, save_config
 import os
 import sys
+from versioning.version import VERSION_STR, APP_NAME
 
 app = FastAPI(title="SealText API")
 
@@ -121,4 +122,12 @@ async def get_chat_page():
         index_path = os.path.join(sys._MEIPASS, 'src', 'api', 'static', 'index.html')
     else:
         index_path = os.path.join(os.path.dirname(__file__), 'static', 'index.html')
-    return FileResponse(index_path) 
+    return FileResponse(index_path)
+
+@app.get("/version")
+async def get_version():
+    """获取版本信息"""
+    return {
+        "version": VERSION_STR,
+        "name": APP_NAME
+    } 

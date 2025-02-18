@@ -1,5 +1,5 @@
 # 版本信息
-VERSION = (0, 2, 0)  # 主版本号, 次版本号, 修订号
+VERSION = (0, 3, 0)  # 主版本号, 次版本号, 修订号
 VERSION_STR = '.'.join(map(str, VERSION))
 VERSION_WITH_META = VERSION_STR
 

@@ -37,26 +37,15 @@ def generate_version():
         sys.stderr.buffer.write(f"生成版本信息时出错: {str(e)}\n".encode('utf-8'))
         raise
 
-def build_cli():
-    """构建命令行版本"""
-    output_name = f"SealText_CLI_v{VERSION_STR}"
-    PyInstaller.__main__.run([
-        'main.py',
-        f'--name={output_name}',
-        '--onefile',
-        '--icon=assets/icon.ico',
-        '--version-file=versioning/version.txt',
-        '--clean',
-        '--noupx'
-    ])
-
-def build_web():
+def build():
     """构建Web版本"""
-    output_name = f"SealText_Web_v{VERSION_STR}"
+    output_name = f"SealText_v{VERSION_STR}"
     static_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'src', 'api', 'static')
     
+    # 确保静态文件目录存在
     if not os.path.exists(static_path):
         os.makedirs(static_path)
+        os.makedirs(os.path.join(static_path, 'css'))
         print(f"创建静态文件目录: {static_path}")
     
     PyInstaller.__main__.run([
@@ -67,8 +56,8 @@ def build_web():
         '--version-file=versioning/version.txt',
         '--clean',
         '--noupx',
-        f'--add-data={static_path};src/api/static',  # 使用绝对路径
-        '--console'  # 添加此参数以显示控制台窗口，方便调试
+        f'--add-data={static_path};src/api/static',
+        '--console'
     ])
 
 if __name__ == "__main__":
@@ -82,8 +71,7 @@ if __name__ == "__main__":
     # 确保在正确的目录
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
-    # 构建两个版本
-    print("构建命令行版本...")
-    build_cli()
-    print("构建Web版本...")
-    build_web() 
+    # 构建
+    print("开始构建...")
+    build()
+    print("构建完成！") 

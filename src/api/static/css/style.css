@@ -1,0 +1,31 @@
+/* 消息区域样式 */
+.messages {
+    height: 60vh;
+    overflow-y: auto;
+}
+
+/* 消息容器样式 */
+.message {
+    max-width: 60%;
+    margin-bottom: 1rem;
+    display: flex;
+    flex-direction: column;
+}
+
+/* 消息气泡样式 */
+.message-bubble {
+    display: inline-block;
+    width: fit-content;
+    max-width: 100%;
+    word-break: break-word;
+}
+
+/* 待发送消息样式 */
+.message.pending {
+    opacity: 0.6;
+}
+
+.message.pending::after {
+    content: ' (发送中...)';
+    font-size: 0.8em;
+} 
