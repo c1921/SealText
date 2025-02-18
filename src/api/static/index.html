@@ -68,6 +68,16 @@
             color: red;
             margin: 10px 0;
         }
+        .message.pending {
+            color: #888;
+            background-color: #f8f8f8;
+        }
+        
+        .message.pending::after {
+            content: ' (发送中...)';
+            font-size: 0.8em;
+            color: #888;
+        }
     </style>
 </head>
 <body>
@@ -95,6 +105,7 @@
     <script>
         let messageUpdateInterval;
         let config;
+        let pendingMessages = new Map();  // 存储待发送的消息
 
         // 页面加载时获取配置
         async function loadConfig() {
@@ -163,17 +174,62 @@
             
             if (!message) return;
 
+            // 生成临时ID
+            const tempId = Date.now().toString();
+            const timestamp = new Date().toISOString();
+            
+            // 立即添加消息到界面
+            addMessageToUI({
+                content: message,
+                author: config.display_name,
+                timestamp: timestamp,
+                tempId: tempId,
+                pending: true
+            });
+            
+            messageInput.value = '';
+
             try {
                 const response = await fetch('/messages?message=' + encodeURIComponent(message), {
                     method: 'POST'
                 });
 
                 if (response.ok) {
-                    messageInput.value = '';
+                    // 移除临时消息标记
+                    pendingMessages.delete(tempId);
                     updateMessages();
+                } else {
+                    // 显示错误状态
+                    const msgElement = document.querySelector(`[data-temp-id="${tempId}"]`);
+                    if (msgElement) {
+                        msgElement.style.color = 'red';
+                        msgElement.querySelector('.content').textContent += ' (发送失败)';
+                    }
                 }
             } catch (error) {
                 document.getElementById('error').textContent = error.message;
+            }
+        }
+
+        function addMessageToUI(msg) {
+            const messagesDiv = document.getElementById('messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message${msg.pending ? ' pending' : ''}`;
+            if (msg.tempId) {
+                messageDiv.setAttribute('data-temp-id', msg.tempId);
+            }
+            
+            messageDiv.innerHTML = `
+                <span class="time">[${new Date(msg.timestamp).toLocaleString()}]</span>
+                <span class="author">${msg.author}:</span>
+                <span class="content">${msg.content}</span>
+            `;
+            
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            
+            if (msg.pending) {
+                pendingMessages.set(msg.tempId, msg);
             }
         }
 
@@ -183,13 +239,13 @@
                 const messages = await response.json();
                 
                 const messagesDiv = document.getElementById('messages');
-                messagesDiv.innerHTML = messages.map(msg => `
-                    <div class="message">
-                        <span class="time">[${new Date(msg.timestamp).toLocaleString()}]</span>
-                        <span class="author">${msg.author}:</span>
-                        <span class="content">${msg.content}</span>
-                    </div>
-                `).join('');
+                messagesDiv.innerHTML = '';
+                
+                // 先添加服务器返回的消息
+                messages.forEach(msg => addMessageToUI(msg));
+                
+                // 再添加待发送的消息
+                pendingMessages.forEach(msg => addMessageToUI(msg));
                 
                 messagesDiv.scrollTop = messagesDiv.scrollHeight;
             } catch (error) {
